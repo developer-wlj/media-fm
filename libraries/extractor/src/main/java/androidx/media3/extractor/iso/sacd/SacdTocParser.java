@@ -18,6 +18,7 @@ package androidx.media3.extractor.iso.sacd;
 import androidx.annotation.Nullable;
 import androidx.media3.common.C;
 import androidx.media3.common.CacheDataReader;
+import androidx.media3.common.util.Log;
 import androidx.media3.common.util.Util;
 import androidx.media3.extractor.iso.IsoConstants;
 import java.io.IOException;
@@ -28,6 +29,21 @@ import java.util.Arrays;
 import java.util.List;
 
 public final class SacdTocParser {
+
+  private static final String TAG = "SacdTocParser";
+
+  private static final boolean NATIVE_AVAILABLE;
+
+  static {
+    boolean loaded;
+    try {
+      System.loadLibrary("isoJNI");
+      loaded = true;
+    } catch (UnsatisfiedLinkError e) {
+      loaded = false;
+    }
+    NATIVE_AVAILABLE = loaded;
+  }
 
   private static final int[] MASTER_TOC_SECTORS = {510, 520, 530};
   private static final byte[] MAGIC_SACDMTOC = {'S', 'A', 'C', 'D', 'M', 'T', 'O', 'C'};
@@ -67,7 +83,18 @@ public final class SacdTocParser {
     return false;
   }
 
+  @Nullable
   public static SacdStructure parse(CacheDataReader reader) throws IOException {
+    if (NATIVE_AVAILABLE) {
+      long[][] areas = nativeParse(reader);
+      if (areas != null && areas.length == 2) {
+        return new SacdStructure(
+            areaFromNative(areas[0], SacdArea.TYPE_STEREO),
+            areaFromNative(areas[1], SacdArea.TYPE_MULTI));
+      }
+      Log.w(TAG, "SACD: invalid native result");
+      return null;
+    }
     IOException lastError = null;
     for (int sector : MASTER_TOC_SECTORS) {
       try {
@@ -81,6 +108,45 @@ public final class SacdTocParser {
     }
     throw new IOException("SACD: no usable master TOC copy", lastError);
   }
+
+  /**
+   * Converts one native area row into a {@link SacdArea}.
+   *
+   * <p>The row layout is {@code [encoding, channelCount, audioStartSector, audioEndSector,
+   * trackCount, (trackNumber, trackChannelCount, startLsn, lengthLsn, durationUs) * trackCount]}.
+   */
+  @Nullable
+  private static SacdArea areaFromNative(long[] area, int expectedAreaType) throws IOException {
+    if (area == null) {
+      return null;
+    }
+    if (area.length >= 5) {
+      long trackCount = area[4];
+      if (trackCount >= 0 && trackCount <= 255 && area.length == trackCount * 5 + 5) {
+        List<SacdTrack> tracks = new ArrayList<>((int) trackCount);
+        for (int i = 5; i < area.length; i += 5) {
+          tracks.add(
+              new SacdTrack(
+                  (int) area[i], (int) area[i + 1], area[i + 2], area[i + 3], area[i + 4]));
+        }
+        int audioEncoding = (int) area[0];
+        int channelCount = (int) area[1];
+        long audioStartSector = area[2];
+        long audioEndSector = area[3];
+        return new SacdArea(
+            expectedAreaType,
+            audioEncoding,
+            channelCount,
+            audioStartSector,
+            audioEndSector,
+            tracks);
+      }
+    }
+    Log.w(TAG, "SACD: invalid native area data");
+    return null;
+  }
+
+  private static native long[][] nativeParse(CacheDataReader reader);
 
   private static SacdStructure parseMasterToc(CacheDataReader reader, byte[] masterSector)
       throws IOException {

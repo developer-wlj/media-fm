@@ -72,7 +72,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -285,6 +287,26 @@ public final class Mp4Extractor implements Extractor {
    * @deprecated Use {@link #Mp4Extractor(SubtitleParser.Factory)} instead
    */
   @Deprecated
+  @Nullable private Map<String, String> clearKeys;
+
+  /**
+   * Sets the local clear keys (16-byte key ids to keys, both hex encoded) used to decrypt samples
+   * when no DRM session manager is attached.
+   *
+   * @param clearKeys The mapping from key id to key, both hex encoded.
+   * @return The extractor, for convenience.
+   */
+  public synchronized Mp4Extractor setClearKeys(Map<String, String> clearKeys) {
+    this.clearKeys = clearKeys != null ? new LinkedHashMap<>(clearKeys) : null;
+    return this;
+  }
+
+  /** Returns the local clear keys, or null if none were set. */
+  @Nullable
+  public synchronized Map<String, String> getClearKeys() {
+    return clearKeys;
+  }
+
   public Mp4Extractor() {
     this(SubtitleParser.Factory.UNSUPPORTED, /* flags= */ FLAG_EMIT_RAW_SUBTITLE_DATA);
   }

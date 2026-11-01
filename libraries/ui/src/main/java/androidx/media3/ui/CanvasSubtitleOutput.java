@@ -37,6 +37,16 @@ import java.util.Map;
  */
 /* package */ final class CanvasSubtitleOutput extends View implements SubtitleView.Output {
 
+  private float bitmapSubtitleBrightness;
+
+  /**
+   * Sets the brightness applied to bitmap cues, in the -1..1 range, where 0 leaves them
+   * unchanged.
+   */
+  public void setBitmapSubtitleBrightness(float bitmapSubtitleBrightness) {
+    this.bitmapSubtitleBrightness = bitmapSubtitleBrightness;
+  }
+
   private final List<SubtitlePainter> painters;
 
   private List<Cue> cues;
@@ -142,6 +152,7 @@ import java.util.Map;
           SubtitleViewUtils.resolveTextSize(
               cue.textSizeType, cue.textSize, textSizeHeight, textSizeHeightMinusPadding);
       SubtitlePainter painter = painters.get(i);
+      painter.setBitmapSubtitleBrightness(bitmapSubtitleBrightness);
       painter.layout(
           cue,
           style,

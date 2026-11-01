@@ -323,6 +323,21 @@ final class MpvPlayerHosts {
       }
 
       @Override
+      public boolean onDiscNavigationActiveProperty(boolean navigationActive) {
+        return player.onDiscNavigationActiveProperty(navigationActive);
+      }
+
+      @Override
+      public boolean onDiscMenuActiveProperty(boolean menuActive) {
+        return player.onDiscMenuActiveProperty(menuActive);
+      }
+
+      @Override
+      public boolean onDiscMenuSupportedProperty(boolean menuSupported) {
+        return player.onDiscMenuSupportedProperty(menuSupported);
+      }
+
+      @Override
       public void setPlayWhenReadyFromNative(boolean playWhenReady) {
         if (playerInfo.isPlayWhenReady() == playWhenReady) {
           return;

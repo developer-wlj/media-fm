@@ -400,6 +400,11 @@ public final class DanmakuController {
     }
   }
 
+  /** Returns a snapshot of the currently loaded items, ordered by time. */
+  public List<Danmaku> getItems() {
+    return timeline.snapshot();
+  }
+
   /** Clears all loaded and displayed items. */
   public void clearItems() {
     dataSourceUri = null;

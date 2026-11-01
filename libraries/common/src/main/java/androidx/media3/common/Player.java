@@ -35,6 +35,10 @@ import androidx.annotation.IntRange;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.media3.common.text.Cue;
+import androidx.media3.common.text.SubtitleSelectionState;
+import androidx.media3.common.text.SubtitleOffsets;
+import androidx.media3.common.DiscMenuState;
+import androidx.media3.common.text.SubtitleContent;
 import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.Size;
 import androidx.media3.common.util.UnstableApi;
@@ -851,6 +855,11 @@ public interface Player {
    */
   interface Listener {
 
+    /** Called when the state of the disc menu changed, for playable disc based media. */
+    @UnstableApi
+    default void onDiscMenuStateChanged(DiscMenuState discMenuState) {}
+
+
     /**
      * Called when one or more player states changed.
      *
@@ -1662,7 +1671,8 @@ public interface Player {
     EVENT_DEVICE_INFO_CHANGED,
     EVENT_DEVICE_VOLUME_CHANGED,
     EVENT_MEDIA_CHAPTERS_CHANGED,
-    EVENT_MEDIA_EDITIONS_CHANGED
+    EVENT_MEDIA_EDITIONS_CHANGED,
+    EVENT_DISC_MENU_STATE_CHANGED
   })
   @interface Event {}
 
@@ -1770,6 +1780,9 @@ public interface Player {
 
   /** {@link #getCurrentMediaEditions()} changed. */
   @UnstableApi int EVENT_MEDIA_EDITIONS_CHANGED = 32;
+
+  /** The disc menu state changed, for playable disc based media. */
+  @UnstableApi int EVENT_DISC_MENU_STATE_CHANGED = 33;
 
   /**
    * Commands that indicate which method calls are currently permitted on a particular {@code
@@ -3420,6 +3433,61 @@ public interface Player {
   @UnstableApi
   default int getAudioSessionId() {
     return C.AUDIO_SESSION_ID_UNSET;
+  }
+
+  /**
+   * Returns the text offsets applied to the primary and secondary subtitle outputs.
+   *
+   * <p>This method should only be called when the player supports subtitle offsets.
+   */
+  @UnstableApi
+  default SubtitleOffsets getSubtitleOffsets() {
+    return SubtitleOffsets.ZERO;
+  }
+
+  /**
+   * Sets the text offsets applied to the primary and secondary subtitle outputs.
+   *
+   * <p>This method should only be called when the player supports subtitle offsets.
+   */
+  @UnstableApi
+  default void setSubtitleOffsets(SubtitleOffsets offsets) {}
+
+  /**
+   * Returns which subtitle track selections currently feed the transcript outputs.
+   */
+  @UnstableApi
+  default SubtitleSelectionState getSubtitleSelectionState() {
+    return SubtitleSelectionState.EMPTY;
+  }
+
+  /**
+   * Returns the decoded subtitle content for the given track selection, or {@link
+   * SubtitleContent#UNSUPPORTED} if the selection does not feed a transcript output.
+   */
+  @UnstableApi
+  default SubtitleContent getSubtitleContentForSelection(TrackSelectionOverride override) {
+    return SubtitleContent.UNSUPPORTED;
+  }
+
+  /** Sets whether subtitle transcript content is enabled for the supported outputs. */
+  @UnstableApi
+  default void setSubtitleContentEnabled(boolean enabled) {}
+
+  /** Returns whether decoding of previously failed subtitle content can be retried. */
+  @UnstableApi
+  default boolean canRetrySubtitleContent(Format format) {
+    return false;
+  }
+
+  /** Retries decoding of subtitle content that previously failed. */
+  @UnstableApi
+  default void retrySubtitleContent(Format format) {}
+
+  /** Returns the current state of the disc menu, for playable disc based media. */
+  @UnstableApi
+  default DiscMenuState getDiscMenuState() {
+    return DiscMenuState.EMPTY;
   }
 
   /**

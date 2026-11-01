@@ -21,6 +21,9 @@ import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_CURRENT_E
 import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_CURRENT_VIDEO_ALBUMART;
 import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_DEMUXER_CACHE_DURATION;
 import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_DEMUXER_CACHE_TIME;
+import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_DISC_MENU_ACTIVE;
+import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_DISC_MENU_SUPPORTED;
+import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_DISC_NAVIGATION_ACTIVE;
 import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_DURATION_FULL;
 import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_EDITION_LIST;
 import static androidx.media3.mpvplayer.nativebridge.MpvConstants.PROP_MEDIA_LIVE;
@@ -75,6 +78,18 @@ public final class MpvEventAdapter implements MPVLib.EventObserver {
         PROP_DEMUXER_CACHE_DURATION,
         PropertyEventHost::onCacheDurationInvalidated,
         PropertyEventHost::onCacheDurationProperty),
+    booleanProperty(
+        PROP_DISC_NAVIGATION_ACTIVE,
+        host -> host.onDiscNavigationActiveProperty(false),
+        PropertyEventHost::onDiscNavigationActiveProperty),
+    booleanProperty(
+        PROP_DISC_MENU_ACTIVE,
+        host -> host.onDiscMenuActiveProperty(false),
+        PropertyEventHost::onDiscMenuActiveProperty),
+    booleanProperty(
+        PROP_DISC_MENU_SUPPORTED,
+        host -> host.onDiscMenuSupportedProperty(false),
+        PropertyEventHost::onDiscMenuSupportedProperty),
     invalidatingBooleanProperty(PROP_PAUSE, PropertyEventHost::onPauseProperty),
     booleanProperty(PROP_PAUSED_FOR_CACHE, PropertyEventHost::onPausedForCacheProperty),
     longProperty(
@@ -386,6 +401,12 @@ public final class MpvEventAdapter implements MPVLib.EventObserver {
     boolean onSeekablePropertyInvalidated();
 
     boolean onSeekableProperty(boolean seekable);
+
+    boolean onDiscNavigationActiveProperty(boolean navigationActive);
+
+    boolean onDiscMenuActiveProperty(boolean menuActive);
+
+    boolean onDiscMenuSupportedProperty(boolean menuSupported);
   }
 
   private interface PropertyDispatcher {

@@ -31,6 +31,7 @@ import static androidx.media3.mpvplayer.nativebridge.MpvConstants.VALUE_REPLACE;
 
 import android.net.Uri;
 import android.text.TextUtils;
+import androidx.annotation.Nullable;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.util.Util;
@@ -47,6 +48,127 @@ public final class MpvCommandDispatcher {
 
   public MpvCommandDispatcher(MpvClient client) {
     this.client = client;
+  }
+
+  /** Dispatches a raw mpv command. */
+  public boolean command(String... args) {
+    return client.command(args);
+  }
+
+  /** Installs startup scripts into the mpv config's lua/.startup directory. */
+  public boolean setStartupScripts(java.util.List<java.io.File> scripts) {
+    for (java.io.File script : scripts != null ? scripts : java.util.Collections.<java.io.File>emptyList()) {
+      if (script == null || !script.exists()) {
+        continue;
+      }
+      java.io.File startupDir = getStartupScriptsDirectory();
+      if (startupDir == null) {
+        return false;
+      }
+      if (!copyScript(script, new java.io.File(startupDir, script.getName()))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Loads a runtime script into the mpv config's lua directory. */
+  public boolean loadScript(String path) {
+    java.io.File source = new java.io.File(path);
+    if (!source.exists()) {
+      return false;
+    }
+    java.io.File scriptsDir = getScriptsDirectory();
+    if (scriptsDir == null) {
+      return false;
+    }
+    java.io.File target = new java.io.File(scriptsDir, source.getName());
+    if (!copyScript(source, target)) {
+      return false;
+    }
+    return command("script-message", "tv/load-script", target.getAbsolutePath());
+  }
+
+  /** Requests unloading of the script with the given client identifier. */
+  public void unloadScript(long clientId) {
+    command("script-message", "tv/unload-script", Long.toString(clientId));
+  }
+
+  /** Returns the value of a user-data property set by a script. */
+  @Nullable
+  public String getScriptData(String key) {
+    return client.getPropertyString("user-data/" + key);
+  }
+
+  /** Returns the current input bindings configuration. */
+  @Nullable
+  public String getInputBindings() {
+    return client.getPropertyString("input-bindings");
+  }
+
+  /** Invokes an mpv script binding by name. */
+  public boolean runScriptBinding(String binding) {
+    return command(CMD_SCRIPT_BINDING, binding);
+  }
+
+  /** Applies the video decoder mode through the hwdec option. */
+  public void setVideoDecoderMode(androidx.media3.mpvplayer.MpvDecoderMode mode) {
+    switch (mode) {
+      case HARDWARE:
+        client.setPropertyString("hwdec", "auto-safe");
+        break;
+      case FFMPEG:
+        client.setPropertyString("hwdec", "no");
+        break;
+      case AUTO:
+      default:
+        client.setPropertyString("hwdec", "auto");
+        break;
+    }
+  }
+
+  @Nullable
+  private java.io.File getScriptsDirectory() {
+    return getMpvSubdirectory("lua");
+  }
+
+  @Nullable
+  private java.io.File getStartupScriptsDirectory() {
+    java.io.File scriptsDirectory = getScriptsDirectory();
+    return scriptsDirectory == null ? null : new java.io.File(scriptsDirectory, ".startup");
+  }
+
+  @Nullable
+  private java.io.File getMpvSubdirectory(String name) {
+    String configDir = client.getPropertyString("config-directory");
+    if (configDir == null || configDir.isEmpty()) {
+      return null;
+    }
+    java.io.File directory = new java.io.File(configDir, name);
+    if (!directory.exists() && !directory.mkdirs()) {
+      return null;
+    }
+    return directory;
+  }
+
+  private static boolean copyScript(java.io.File source, java.io.File target) {
+    try (java.io.InputStream in = new java.io.FileInputStream(source);
+        java.io.OutputStream out = new java.io.FileOutputStream(target)) {
+      byte[] buffer = new byte[8192];
+      int read;
+      while ((read = in.read(buffer)) != -1) {
+        out.write(buffer, 0, read);
+      }
+      return true;
+    } catch (java.io.IOException e) {
+      return false;
+    }
+  }
+
+  /** Reads a boolean mpv property, or null when unavailable. */
+  @Nullable
+  public Boolean getPropertyBoolean(String property) {
+    return client.getPropertyBoolean(property);
   }
 
   private static String getSubtitleFlags(@C.SelectionFlags int selectionFlags, boolean select) {

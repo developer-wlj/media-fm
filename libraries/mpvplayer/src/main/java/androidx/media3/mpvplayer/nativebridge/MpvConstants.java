@@ -26,6 +26,9 @@ public final class MpvConstants {
   public static final String PROP_ANDROID_SURFACE_SIZE = "android-surface-size";
   public static final String PROP_CHAPTER = "chapter";
   public static final String PROP_CHAPTER_LIST = "chapter-list";
+  public static final String PROP_DISC_MENU_ACTIVE = "disc-menu-active";
+  public static final String PROP_DISC_MENU_SUPPORTED = "disc-menu-supported";
+  public static final String PROP_DISC_NAVIGATION_ACTIVE = "disc-navigation-active";
   public static final String PROP_CURRENT_EDITION = "current-edition";
   public static final String PROP_CURRENT_VIDEO_ALBUMART = "current-tracks/video/albumart";
   public static final String PROP_DURATION_FULL = "duration/full";

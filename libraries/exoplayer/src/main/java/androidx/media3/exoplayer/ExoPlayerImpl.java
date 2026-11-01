@@ -61,6 +61,7 @@ import android.view.TextureView;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.DiscMenuState;
 import androidx.media3.common.AuxEffectInfo;
 import androidx.media3.common.BasePlayer;
 import androidx.media3.common.C;
@@ -89,6 +90,7 @@ import androidx.media3.common.VideoFrameProcessor;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.audio.AudioBecomingNoisyManager;
 import androidx.media3.common.text.Cue;
+import androidx.media3.common.text.SubtitleOffsets;
 import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.BackgroundThreadStateHandler;
 import androidx.media3.common.util.Clock;
@@ -255,6 +257,8 @@ import java.util.function.IntConsumer;
   private float unmuteVolume;
   private long audioOffsetMs;
   private long textOffsetMs;
+  private long secondaryTextOffsetMs;
+  private DiscMenuState discMenuState = DiscMenuState.EMPTY;
   private boolean skipSilenceEnabled;
   private CueGroup currentCueGroup;
   @Nullable private VideoFrameMetadataListener videoFrameMetadataListener;
@@ -1799,6 +1803,42 @@ import java.util.function.IntConsumer;
   public long getTextOffsetMs() {
     verifyApplicationThread();
     return textOffsetMs;
+  }
+
+  @Override
+  public SubtitleOffsets getSubtitleOffsets() {
+    verifyApplicationThread();
+    return new SubtitleOffsets(textOffsetMs, secondaryTextOffsetMs);
+  }
+
+  @Override
+  public DiscMenuState getDiscMenuState() {
+    verifyApplicationThread();
+    return discMenuState;
+  }
+
+  @Override
+  public void setDiscMenuState(DiscMenuState discMenuState) {
+    verifyApplicationThread();
+    if (this.discMenuState.equals(discMenuState)) {
+      return;
+    }
+    this.discMenuState = discMenuState;
+    listeners.sendEvent(
+        Player.EVENT_DISC_MENU_STATE_CHANGED,
+        listener -> listener.onDiscMenuStateChanged(discMenuState));
+  }
+
+  @Override
+  public void setSubtitleOffsets(SubtitleOffsets offsets) {
+    verifyApplicationThread();
+    SubtitleOffsets current = offsets == null ? SubtitleOffsets.ZERO : offsets;
+    setTextOffsetMs(current.primaryMs);
+    if (this.secondaryTextOffsetMs == current.secondaryMs) {
+      return;
+    }
+    this.secondaryTextOffsetMs = current.secondaryMs;
+    internalPlayer.setSecondaryTextOffsetMs(current.secondaryMs);
   }
 
   @Override

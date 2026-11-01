@@ -433,6 +433,17 @@ public final class HlsMediaSource extends BaseMediaSource
 
       playlistParserFactory.setAdblock(mediaItem.adblock);
 
+      HlsDataSourceFactory hlsDataSourceFactory = this.hlsDataSourceFactory;
+      @Nullable
+      CmgConfiguration cmgConfiguration =
+          CmgConfiguration.fromMediaUri(mediaItem.localConfiguration.uri);
+      if (cmgConfiguration != null) {
+        // Wrap media chunk data sources so CMG protected transport streams are decrypted. Only the
+        // media data type is wrapped; playlists and DRM requests pass through unchanged.
+        hlsDataSourceFactory =
+            new CmgDataSource.Factory(hlsDataSourceFactory, new CmgSession(cmgConfiguration));
+      }
+
       return new HlsMediaSource(
           mediaItem,
           hlsDataSourceFactory,

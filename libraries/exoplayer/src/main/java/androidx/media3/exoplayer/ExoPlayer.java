@@ -39,6 +39,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RestrictTo;
 import androidx.annotation.VisibleForTesting;
 import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.DiscMenuState;
 import androidx.media3.common.AuxEffectInfo;
 import androidx.media3.common.C;
 import androidx.media3.common.Effect;
@@ -172,6 +173,15 @@ import java.util.List;
  * </ul>
  */
 public interface ExoPlayer extends Player {
+
+  /**
+   * Publishes the current disc menu state, used by disc navigation controllers to make the state
+   * readable from the player. This is a no-op by default.
+   *
+   * @param discMenuState The current disc menu state.
+   */
+  @UnstableApi
+  default void setDiscMenuState(DiscMenuState discMenuState) {}
 
   /** Support for processing the currently initialized audio output. */
   @UnstableApi

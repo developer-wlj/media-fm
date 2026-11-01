@@ -27,6 +27,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RestrictTo;
 import androidx.media3.common.DolbyVisionOutputPolicy;
 import androidx.media3.mpvplayer.options.MpvNetworkOptions;
+import androidx.media3.datasource.DataSource;
 import androidx.media3.mpvplayer.options.MpvOptions;
 import androidx.media3.mpvplayer.options.MpvPlayerOptionDefaults;
 import com.google.common.collect.ImmutableList;
@@ -47,6 +48,8 @@ public final class MpvPlayerConfig {
   private final @DolbyVisionOutputPolicy.Mode int dolbyVisionOutputPolicy;
   private final boolean dolbyVisionOutputPolicySet;
   private final boolean videoSharpnessSupported;
+  @Nullable private final DataSource.Factory dataSourceFactory;
+  private final ImmutableList<java.io.File> defaultFontDirectories;
 
   private MpvPlayerConfig(Builder builder) {
     this.defaultUserAgent = nullToEmpty(builder.defaultUserAgent);
@@ -59,6 +62,8 @@ public final class MpvPlayerConfig {
     this.dolbyVisionOutputPolicy = builder.dolbyVisionOutputPolicy;
     this.dolbyVisionOutputPolicySet = builder.dolbyVisionOutputPolicySet;
     this.videoSharpnessSupported = builder.videoSharpnessSupported;
+    this.dataSourceFactory = builder.dataSourceFactory;
+    this.defaultFontDirectories = builder.defaultFontDirectories;
   }
 
   private static void applyStrings(
@@ -116,6 +121,19 @@ public final class MpvPlayerConfig {
     return videoSharpnessSupported;
   }
 
+  /** Returns the default directories mpv loads fonts from. */
+  @RestrictTo(LIBRARY_GROUP)
+  public ImmutableList<java.io.File> getDefaultFontDirectories() {
+    return defaultFontDirectories;
+  }
+
+  /** Returns the data source factory used for disc and cache aware reading, or null. */
+  @Nullable
+  @RestrictTo(LIBRARY_GROUP)
+  public DataSource.Factory getDataSourceFactory() {
+    return dataSourceFactory;
+  }
+
   @Nullable
   @RestrictTo(LIBRARY_GROUP)
   public String getRequestedPassthroughCodecs() {
@@ -168,6 +186,8 @@ public final class MpvPlayerConfig {
         DolbyVisionOutputPolicy.AUTO;
     private boolean dolbyVisionOutputPolicySet;
     private boolean videoSharpnessSupported = true;
+    @Nullable private DataSource.Factory dataSourceFactory;
+    private ImmutableList<java.io.File> defaultFontDirectories = ImmutableList.of();
     private boolean buildCalled;
 
     private static void addString(List<StringOption> options, String name, String value) {
@@ -302,6 +322,129 @@ public final class MpvPlayerConfig {
       checkState(!buildCalled);
       return MpvPlayerOptionDefaults.addSubtitleOptions(
           this, checkNotNull(context), checkNotNull(options));
+    }
+
+    /** Sets the data source factory used for disc and cache aware reading. */
+    @CanIgnoreReturnValue
+    public Builder setDataSourceFactory(
+        @Nullable DataSource.Factory dataSourceFactory) {
+      this.dataSourceFactory = dataSourceFactory;
+      return this;
+    }
+
+    /**
+     * Sets the default directories mpv loads fonts from. Ignored when an explicit fonts
+     * directory is set through {@link #setFontsDirectory(String)}.
+     *
+     * @param userFontsDirectory The user fonts directory.
+     * @param systemFontsDirectory The system fonts directory.
+     */
+    @CanIgnoreReturnValue
+    public Builder setDefaultFontDirectories(
+        java.io.File userFontsDirectory, java.io.File systemFontsDirectory) {
+      this.defaultFontDirectories =
+          ImmutableList.of(userFontsDirectory, systemFontsDirectory);
+      return this;
+    }
+
+    /** Sets the directory mpv loads additional fonts from. */
+    @CanIgnoreReturnValue
+    public Builder setFontsDirectory(@Nullable String fontsDirectory) {
+      if (fontsDirectory != null) {
+        addString(subtitleStringOptions, "sub-fonts-dir", fontsDirectory);
+      }
+      return this;
+    }
+
+    /** Sets the font family used for text subtitles. */
+    @CanIgnoreReturnValue
+    public Builder setFontFamily(@Nullable String fontFamily) {
+      if (fontFamily != null && !fontFamily.isEmpty()) {
+        addString(subtitleStringOptions, "sub-font", fontFamily);
+      }
+      return this;
+    }
+
+    /** Sets the vertical position offset of the primary subtitles, in the 0..100 range. */
+    @CanIgnoreReturnValue
+    public Builder setVerticalOffset(float verticalOffset) {
+      addDouble(subtitleDoubleOptions, "sub-pos", verticalOffset);
+      return this;
+    }
+
+    /** Sets the brightness applied to bitmap subtitles, in the -1..1 range. */
+    @CanIgnoreReturnValue
+    public Builder setBitmapSubtitleBrightness(float brightness) {
+      addDouble(subtitleDoubleOptions, "sub-bitmap-brightness", brightness);
+      return this;
+    }
+
+    /** Sets the vertical position of the secondary subtitles, in the 0..100 range. */
+    @CanIgnoreReturnValue
+    public Builder setSecondarySubtitlePosition(double position) {
+      addDouble(subtitleDoubleOptions, "secondary-sub-pos", position);
+      return this;
+    }
+
+    /** Sets the time offset of the secondary subtitles, in seconds. */
+    @CanIgnoreReturnValue
+    public Builder setSecondaryVerticalOffset(double offsetSeconds) {
+      addDouble(subtitleDoubleOptions, "secondary-sub-delay", -offsetSeconds);
+      return this;
+    }
+
+    /** Sets whether ASS style overrides apply to the secondary subtitles. */
+    @CanIgnoreReturnValue
+    public Builder setSecondaryAssStyleOverride(boolean enabled) {
+      addString(subtitleStringOptions, "secondary-sub-ass-override", enabled ? "yes" : "no");
+      return this;
+    }
+
+    /**
+     * Sets the default style for text subtitles.
+     *
+     * @param foregroundColor The text color as an ARGB int.
+     * @param backgroundColor The background color as an ARGB int.
+     * @param edgeType The edge type, one of {@code CaptionStyleCompat} edge types.
+     * @param edgeColor The edge color as an ARGB int.
+     * @param edgeWidth The edge width in pixels.
+     * @param shadowOffset The shadow offset in pixels.
+     */
+    @CanIgnoreReturnValue
+    public Builder setDefaultStyle(
+        int foregroundColor,
+        int backgroundColor,
+        int edgeType,
+        int edgeColor,
+        float edgeWidth,
+        float shadowOffset) {
+      addString(subtitleStringOptions, "sub-color", toMpvColor(foregroundColor));
+      addString(subtitleStringOptions, "sub-back-color", toMpvColor(backgroundColor));
+      addString(subtitleStringOptions, "sub-border-color", toMpvColor(edgeColor));
+      addDouble(subtitleDoubleOptions, "sub-border-size", edgeWidth);
+      addDouble(subtitleDoubleOptions, "sub-shadow-offset", shadowOffset);
+      addDouble(subtitleDoubleOptions, "sub-blur", 0.0);
+      addString(subtitleStringOptions, "sub-border-style", toMpvBorderStyle(edgeType));
+      return this;
+    }
+
+    private static String toMpvColor(int argb) {
+      return String.format("#%08X", argb);
+    }
+
+    private static String toMpvBorderStyle(int edgeType) {
+      // Edge type values follow androidx.media3.ui.CaptionStyleCompat.
+      switch (edgeType) {
+        case 0: // EDGE_TYPE_NONE
+          return "none";
+        case 2: // EDGE_TYPE_DROP_SHADOW
+          return "drop-shadow";
+        case 3: // EDGE_TYPE_RAISED
+        case 4: // EDGE_TYPE_DEPRESSED
+          return "outline-and-shadow";
+        default: // EDGE_TYPE_OUTLINE
+          return "outline-and-shadow";
+      }
     }
 
     public MpvPlayerConfig build() {

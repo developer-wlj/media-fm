@@ -133,6 +133,7 @@ public abstract class SimpleBasePlayer extends BasePlayer {
       private Metadata timedMetadata;
       private ImmutableList<MediaChapter> currentMediaChapters;
       private ImmutableList<MediaEdition> currentMediaEditions;
+      private DiscMenuState discMenuState;
       @Nullable private ImmutableList<MediaItemData> playlist;
       private Timeline timeline;
       @Nullable private Tracks currentTracks;
@@ -184,6 +185,7 @@ public abstract class SimpleBasePlayer extends BasePlayer {
         timedMetadata = new Metadata(/* presentationTimeUs= */ C.TIME_UNSET);
         currentMediaChapters = ImmutableList.of();
         currentMediaEditions = ImmutableList.of();
+        discMenuState = DiscMenuState.EMPTY;
         playlist = ImmutableList.of();
         timeline = Timeline.EMPTY;
         currentTracks = null;
@@ -235,6 +237,7 @@ public abstract class SimpleBasePlayer extends BasePlayer {
         this.timedMetadata = state.timedMetadata;
         this.currentMediaChapters = state.currentMediaChapters;
         this.currentMediaEditions = state.currentMediaEditions;
+        this.discMenuState = state.discMenuState;
         this.timeline = state.timeline;
         if (state.timeline instanceof PlaylistTimeline) {
           this.playlist = ((PlaylistTimeline) state.timeline).playlist;
@@ -643,6 +646,18 @@ public abstract class SimpleBasePlayer extends BasePlayer {
       }
 
       /**
+       * Sets the current disc menu state.
+       *
+       * @param discMenuState The current disc menu state.
+       * @return This builder.
+       */
+      @CanIgnoreReturnValue
+      public Builder setDiscMenuState(DiscMenuState discMenuState) {
+        this.discMenuState = discMenuState;
+        return this;
+      }
+
+      /**
        * Sets the playlist as a list of {@link MediaItemData media items}.
        *
        * <p>All items must have unique {@linkplain MediaItemData.Builder#setUid UIDs}.
@@ -1004,6 +1019,9 @@ public abstract class SimpleBasePlayer extends BasePlayer {
     /** The current media edition entries. */
     public final ImmutableList<MediaEdition> currentMediaEditions;
 
+    /** The current disc menu state. */
+    public final DiscMenuState discMenuState;
+
     /** The {@link Timeline}. */
     public final Timeline timeline;
 
@@ -1201,6 +1219,7 @@ public abstract class SimpleBasePlayer extends BasePlayer {
       this.timedMetadata = builder.timedMetadata;
       this.currentMediaChapters = builder.currentMediaChapters;
       this.currentMediaEditions = builder.currentMediaEditions;
+      this.discMenuState = builder.discMenuState;
       this.timeline = builder.timeline;
       this.currentTracks = checkNotNull(currentTracks);
       this.currentMetadata = currentMetadata;
@@ -1283,6 +1302,7 @@ public abstract class SimpleBasePlayer extends BasePlayer {
           && timedMetadata.equals(state.timedMetadata)
           && currentMediaChapters.equals(state.currentMediaChapters)
           && currentMediaEditions.equals(state.currentMediaEditions)
+          && discMenuState.equals(state.discMenuState)
           && timeline.equals(state.timeline)
           && currentTracks.equals(state.currentTracks)
           && currentMetadata.equals(state.currentMetadata)
@@ -1333,6 +1353,7 @@ public abstract class SimpleBasePlayer extends BasePlayer {
       result = 31 * result + timedMetadata.hashCode();
       result = 31 * result + currentMediaChapters.hashCode();
       result = 31 * result + currentMediaEditions.hashCode();
+      result = 31 * result + discMenuState.hashCode();
       result = 31 * result + timeline.hashCode();
       result = 31 * result + currentTracks.hashCode();
       result = 31 * result + currentMetadata.hashCode();
@@ -2772,6 +2793,12 @@ public abstract class SimpleBasePlayer extends BasePlayer {
   }
 
   @Override
+  public final DiscMenuState getDiscMenuState() {
+    verifyApplicationThreadAndInitState();
+    return state.discMenuState;
+  }
+
+  @Override
   public final boolean selectChapter(MediaChapter chapter) {
     verifyApplicationThreadAndInitState();
     return handleSelectChapter(chapter);
@@ -3945,6 +3972,11 @@ public abstract class SimpleBasePlayer extends BasePlayer {
       listeners.queueEvent(
           Player.EVENT_MEDIA_EDITIONS_CHANGED,
           listener -> listener.onMediaEditionsChanged(newState.currentMediaEditions));
+    }
+    if (!previousState.discMenuState.equals(newState.discMenuState)) {
+      listeners.queueEvent(
+          Player.EVENT_DISC_MENU_STATE_CHANGED,
+          listener -> listener.onDiscMenuStateChanged(newState.discMenuState));
     }
     if (!previousState.currentMetadata.equals(newState.currentMetadata)) {
       listeners.queueEvent(

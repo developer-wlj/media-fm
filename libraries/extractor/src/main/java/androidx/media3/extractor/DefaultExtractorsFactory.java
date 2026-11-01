@@ -19,6 +19,8 @@ import static androidx.media3.common.FileTypes.inferFileTypeFromResponseHeaders;
 import static androidx.media3.common.FileTypes.inferFileTypeFromUri;
 
 import android.net.Uri;
+
+import com.google.common.base.Ascii;
 import androidx.annotation.GuardedBy;
 import androidx.annotation.Nullable;
 import androidx.media3.common.C;
@@ -166,6 +168,9 @@ public final class DefaultExtractorsFactory implements ExtractorsFactory {
   private @FlacExtractor.Flags int flacFlags;
   private @MatroskaExtractor.Flags int matroskaFlags;
   private @Mp4Extractor.Flags int mp4Flags;
+
+  @Nullable private Map<String, String> mp4ClearKeys;
+  private @MatroskaExtractor.Flags int matroskaFlagsForHttpSources;
   private @FragmentedMp4Extractor.Flags int fragmentedMp4Flags;
   private @Mp3Extractor.Flags int mp3Flags;
   private @TsExtractor.Mode int tsMode;
@@ -313,6 +318,34 @@ public final class DefaultExtractorsFactory implements ExtractorsFactory {
   @CanIgnoreReturnValue
   public synchronized DefaultExtractorsFactory setMp4ExtractorFlags(@Mp4Extractor.Flags int flags) {
     this.mp4Flags = flags;
+    return this;
+  }
+
+  /**
+   * Sets the local clear keys (16-byte key ids to keys, both hex encoded) to use for {@link
+   * Mp4Extractor} instances created by this factory.
+   *
+   * @param clearKeys The mapping from key id to key, both hex encoded.
+   * @return The factory, for convenience.
+   */
+  @CanIgnoreReturnValue
+  public synchronized DefaultExtractorsFactory setMp4ClearKeys(
+      @Nullable Map<String, String> clearKeys) {
+    this.mp4ClearKeys = clearKeys;
+    return this;
+  }
+
+  /**
+   * Sets flags for {@link MatroskaExtractor} instances created for HTTP(S) sources. Flags for
+   * other sources are controlled by {@link #setMatroskaExtractorFlags(int)}.
+   *
+   * @param flags The flags to use for HTTP(S) sources.
+   * @return The factory, for convenience.
+   */
+  @CanIgnoreReturnValue
+  public synchronized DefaultExtractorsFactory setMatroskaExtractorFlagsForHttpSources(
+      @MatroskaExtractor.Flags int flags) {
+    this.matroskaFlagsForHttpSources = flags;
     return this;
   }
 
@@ -478,24 +511,25 @@ public final class DefaultExtractorsFactory implements ExtractorsFactory {
     @FileTypes.Type
     int responseHeadersInferredFileType = inferFileTypeFromResponseHeaders(responseHeaders);
     if (responseHeadersInferredFileType != FileTypes.UNKNOWN) {
-      addExtractorsForFileType(responseHeadersInferredFileType, extractors);
+      addExtractorsForFileType(responseHeadersInferredFileType, uri, extractors);
     }
 
     @FileTypes.Type int uriInferredFileType = inferFileTypeFromUri(uri);
     if (uriInferredFileType != FileTypes.UNKNOWN
         && uriInferredFileType != responseHeadersInferredFileType) {
-      addExtractorsForFileType(uriInferredFileType, extractors);
+      addExtractorsForFileType(uriInferredFileType, uri, extractors);
     }
 
     for (int fileType : DEFAULT_EXTRACTOR_ORDER) {
       if (fileType != responseHeadersInferredFileType && fileType != uriInferredFileType) {
-        addExtractorsForFileType(fileType, extractors);
+        addExtractorsForFileType(fileType, uri, extractors);
       }
     }
     return extractors.toArray(new Extractor[0]);
   }
 
-  private void addExtractorsForFileType(@FileTypes.Type int fileType, List<Extractor> extractors) {
+  private void addExtractorsForFileType(
+      @FileTypes.Type int fileType, Uri uri, List<Extractor> extractors) {
     switch (fileType) {
       case FileTypes.AC3:
         extractors.add(new Ac3Extractor());
@@ -539,10 +573,15 @@ public final class DefaultExtractorsFactory implements ExtractorsFactory {
         extractors.add(new FlvExtractor());
         break;
       case FileTypes.MATROSKA:
+        String matroskaScheme = uri.getScheme();
+        boolean matroskaOverHttp =
+            matroskaScheme != null
+                && (Ascii.equalsIgnoreCase("http", matroskaScheme)
+                    || Ascii.equalsIgnoreCase("https", matroskaScheme));
         extractors.add(
             new MatroskaExtractor(
                 subtitleParserFactory,
-                matroskaFlags
+                (matroskaOverHttp ? matroskaFlags | matroskaFlagsForHttpSources : matroskaFlags)
                     | (textTrackTranscodingEnabled
                         ? 0
                         : MatroskaExtractor.FLAG_EMIT_RAW_SUBTITLE_DATA)));
@@ -575,12 +614,17 @@ public final class DefaultExtractorsFactory implements ExtractorsFactory {
                         : 0)));
         extractors.add(
             new Mp4Extractor(
-                subtitleParserFactory,
-                mp4Flags
-                    | Mp4Extractor.codecsToParseWithinGopSampleDependenciesAsFlags(
-                        codecsToParseWithinGopSampleDependencies)
-                    | (textTrackTranscodingEnabled ? 0 : Mp4Extractor.FLAG_EMIT_RAW_SUBTITLE_DATA)
-                    | (disableArtworkMetadata ? Mp4Extractor.FLAG_DISABLE_ARTWORK_METADATA : 0)));
+                    subtitleParserFactory,
+                    mp4Flags
+                        | Mp4Extractor.codecsToParseWithinGopSampleDependenciesAsFlags(
+                            codecsToParseWithinGopSampleDependencies)
+                        | (textTrackTranscodingEnabled
+                            ? 0
+                            : Mp4Extractor.FLAG_EMIT_RAW_SUBTITLE_DATA)
+                        | (disableArtworkMetadata
+                            ? Mp4Extractor.FLAG_DISABLE_ARTWORK_METADATA
+                            : 0))
+                .setClearKeys(mp4ClearKeys));
         break;
       case FileTypes.OGG:
         extractors.add(new OggExtractor());

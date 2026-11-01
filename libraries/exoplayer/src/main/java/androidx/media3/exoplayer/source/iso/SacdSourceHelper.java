@@ -40,7 +40,11 @@ import java.util.ArrayList;
 final class SacdSourceHelper {
 
   static SacdStructure parseStructure(CacheDataReader isoReader) throws IOException {
-    return SacdTocParser.parse(isoReader);
+    SacdStructure structure = SacdTocParser.parse(isoReader);
+    if (structure == null) {
+      throw new IOException("SACD: TOC parse failed");
+    }
+    return structure;
   }
 
   static MediaSource buildSource(

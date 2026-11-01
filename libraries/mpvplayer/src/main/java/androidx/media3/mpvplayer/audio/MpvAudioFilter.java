@@ -162,6 +162,20 @@ public final class MpvAudioFilter {
     }
 
     @CanIgnoreReturnValue
+    /**
+     * Adds a dynamic normalization filter with the given mix amount (0..1) and loudness target
+     * (LUFS).
+     */
+    public Builder addDynamicNormalization(String id, double amount, double target) {
+      checkState(!buildCalled);
+      String filterTarget = target("dynorm", id);
+      String filter =
+          Util.formatInvariant(
+              "%s=amount=%s:target=%s", filterTarget, decimal(amount, 3), decimal(target, 1));
+      fixPts = true;
+      return addFilter(filter, filter);
+    }
+
     public Builder addLoudnessNormalization(
         String id, double integratedLoudness, double loudnessRange, double truePeak) {
       checkState(!buildCalled);

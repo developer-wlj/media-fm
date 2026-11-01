@@ -577,6 +577,22 @@ import java.util.Objects;
     handler.obtainMessage(MSG_SET_TEXT_OFFSET, Long.valueOf(textOffsetMs)).sendToTarget();
   }
 
+  private long secondaryTextOffsetMs;
+
+  /**
+   * Stores the offset applied to the secondary subtitle output. Unlike the primary offset, it is
+   * consumed when transcript content is fetched for the secondary selection rather than by the
+   * text renderer.
+   */
+  public void setSecondaryTextOffsetMs(long secondaryTextOffsetMs) {
+    this.secondaryTextOffsetMs = secondaryTextOffsetMs;
+  }
+
+  /** Returns the offset applied to the secondary subtitle output. */
+  public long getSecondaryTextOffsetMs() {
+    return secondaryTextOffsetMs;
+  }
+
   private void handleAudioFocusPlayerCommandInternal(
       @AudioFocusManager.PlayerCommand int playerCommand) throws ExoPlaybackException {
     updatePlayWhenReadyWithAudioFocus(

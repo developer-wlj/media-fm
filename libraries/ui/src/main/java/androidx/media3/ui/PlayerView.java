@@ -28,6 +28,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.lang.annotation.ElementType.TYPE_USE;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.Resources;
@@ -36,6 +39,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -52,6 +56,7 @@ import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -65,7 +70,9 @@ import androidx.media3.common.AdOverlayInfo;
 import androidx.media3.common.AdViewProvider;
 import androidx.media3.common.C;
 import androidx.media3.common.ErrorMessageProvider;
+import androidx.media3.common.DiscMenuController;
 import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.VideoTransform;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.Player.DiscontinuityReason;
@@ -328,6 +335,10 @@ public class PlayerView extends FrameLayout implements AdViewProvider {
   @Nullable private final Object imageOutput;
 
   @Nullable private Player player;
+  @Nullable private DiscMenuController discMenuController;
+  private VideoTransform videoTransform = VideoTransform.IDENTITY;
+  private float videoAspectRatioOverride;
+  @Nullable private ValueAnimator videoTransformAnimator;
   private boolean useController;
 
   // At most one of controllerVisibilityListener and legacyControllerVisibilityListener is non-null.
@@ -513,6 +524,7 @@ public class PlayerView extends FrameLayout implements AdViewProvider {
       surfaceView.setOnClickListener(componentListener);
       surfaceView.setClickable(false);
       contentFrame.addView(surfaceView, 0);
+      applyVideoTransform();
     } else {
       surfaceView = null;
     }
@@ -649,6 +661,7 @@ public class PlayerView extends FrameLayout implements AdViewProvider {
         new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     contentFrame.addView(surfaceView, 0);
+    applyVideoTransform();
     surfaceViewIgnoresVideoAspectRatio = false;
     if (player != null && player.isCommandAvailable(COMMAND_SET_VIDEO_SURFACE)) {
       if (surfaceView instanceof TextureView) {
@@ -697,6 +710,145 @@ public class PlayerView extends FrameLayout implements AdViewProvider {
   @Nullable
   public Player getPlayer() {
     return player;
+  }
+
+  /**
+   * Binds the backend {@link Player} to this view. Equivalent to {@link #setPlayer(Player)} and
+   * intended for engines that manage the view binding themselves.
+   *
+   * @param player The {@link Player} to use, or {@code null} to detach the current player.
+   */
+  public void setBackendPlayer(@Nullable Player player) {
+    setPlayer(player);
+  }
+
+  /** Sets the controller that drives disc menus, or {@code null} to remove it. */
+  public void setDiscMenuController(@Nullable DiscMenuController controller) {
+    this.discMenuController = controller;
+  }
+
+  /**
+   * Dispatches a touch event to the disc menu, when one is set.
+   *
+   * @return Whether the disc menu handled the event.
+   */
+  public boolean dispatchDiscMenuTouchEvent(MotionEvent event) {
+    return discMenuController != null && discMenuController.dispatchTouchEvent(event);
+  }
+
+  /** Returns the currently applied video transform. */
+  public VideoTransform getVideoTransform() {
+    return videoTransform;
+  }
+
+  /** Applies a pan and scale transform to the video surface. */
+  public void setVideoTransform(VideoTransform transform) {
+    this.videoTransform = transform == null ? VideoTransform.IDENTITY : transform;
+    applyVideoTransform();
+  }
+
+  private void applyVideoTransform() {
+    // The transform targets the video surface only; overlays such as subtitles keep their layout.
+    @Nullable View target = surfaceView != null ? surfaceView : contentFrame;
+    if (target == null) {
+      return;
+    }
+    float scaleX = videoTransform.scaleX;
+    float scaleY = videoTransform.scaleY;
+    target.setScaleX(scaleX == 0.0f ? 1.0f : scaleX);
+    target.setScaleY(scaleY == 0.0f ? 1.0f : scaleY);
+    target.setTranslationX(panToTranslation(videoTransform.panX, target.getWidth()));
+    target.setTranslationY(panToTranslation(videoTransform.panY, target.getHeight()));
+  }
+
+  private static float panToTranslation(float pan, int size) {
+    if (pan == 0.0f || size == 0) {
+      return 0.0f;
+    }
+    return Math.max(-1.0f, Math.min(1.0f, pan)) * size / 2.0f;
+  }
+
+  /** Returns the bounds of the video content in this view's coordinate space. */
+  public RectF getVideoBounds() {
+    RectF bounds = new RectF();
+    @Nullable View target = surfaceView != null ? surfaceView : contentFrame;
+    if (target == null) {
+      bounds.set(0, 0, getWidth(), getHeight());
+      return bounds;
+    }
+    Rect rect = new Rect();
+    rect.set(0, 0, target.getWidth(), target.getHeight());
+    offsetDescendantRectToMyCoords(target, rect);
+    bounds.set(rect);
+    return bounds;
+  }
+
+  /**
+   * Smoothly animates the video transform to {@code target} over {@code durationMs} milliseconds.
+   *
+   * @param target The transform to animate towards.
+   * @param durationMs The duration of the animation in milliseconds.
+   */
+  public void animateVideoTransform(VideoTransform target, int durationMs) {
+    finishVideoTransformAnimation();
+    if (durationMs <= 0) {
+      setVideoTransform(target);
+      return;
+    }
+    VideoTransform start = videoTransform;
+    ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+    animator.setDuration(durationMs);
+    animator.setInterpolator(new DecelerateInterpolator());
+    animator.addUpdateListener(
+        animation -> {
+          float fraction = animation.getAnimatedFraction();
+          setVideoTransform(
+              new VideoTransform(
+                  lerp(start.scaleX, target.scaleX, fraction),
+                  lerp(start.scaleY, target.scaleY, fraction),
+                  lerp(start.panX, target.panX, fraction),
+                  lerp(start.panY, target.panY, fraction)));
+        });
+    animator.addListener(
+        new AnimatorListenerAdapter() {
+          @Override
+          public void onAnimationEnd(Animator animation) {
+            if (videoTransformAnimator == animation) {
+              videoTransformAnimator = null;
+              setVideoTransform(target);
+            }
+          }
+        });
+    videoTransformAnimator = animator;
+    animator.start();
+  }
+
+  /** Immediately finishes any in-progress video transform animation, keeping the current value. */
+  public void finishVideoTransformAnimation() {
+    if (videoTransformAnimator != null) {
+      ValueAnimator animator = videoTransformAnimator;
+      videoTransformAnimator = null;
+      animator.cancel();
+    }
+  }
+
+  private static float lerp(float start, float end, float fraction) {
+    return start + (end - start) * fraction;
+  }
+
+  /** Returns the aspect ratio override, or 0 to follow the video aspect ratio. */
+  public float getVideoAspectRatioOverride() {
+    return videoAspectRatioOverride;
+  }
+
+  /**
+   * Overrides the aspect ratio of the content frame.
+   *
+   * @param aspectRatioOverride The aspect ratio to apply, or 0 to follow the video aspect ratio.
+   */
+  public void setVideoAspectRatioOverride(float aspectRatioOverride) {
+    this.videoAspectRatioOverride = aspectRatioOverride;
+    updateAspectRatio();
   }
 
   /**
@@ -1986,6 +2138,10 @@ public class PlayerView extends FrameLayout implements AdViewProvider {
   }
 
   private void updateAspectRatio() {
+    if (videoAspectRatioOverride > 0.0f) {
+      onContentAspectRatioChanged(contentFrame, videoAspectRatioOverride);
+      return;
+    }
     VideoSize videoSize = player != null ? player.getVideoSize() : VideoSize.UNKNOWN;
     int width = videoSize.width;
     int height = videoSize.height;

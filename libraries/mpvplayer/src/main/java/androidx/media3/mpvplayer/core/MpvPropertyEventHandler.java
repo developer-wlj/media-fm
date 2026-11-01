@@ -257,6 +257,21 @@ final class MpvPropertyEventHandler implements MpvEventAdapter.PropertyEventHost
             : MpvPlaybackState.SeekableState.NOT_SEEKABLE);
   }
 
+  @Override
+  public boolean onDiscNavigationActiveProperty(boolean navigationActive) {
+    return host.onDiscNavigationActiveProperty(navigationActive);
+  }
+
+  @Override
+  public boolean onDiscMenuActiveProperty(boolean menuActive) {
+    return host.onDiscMenuActiveProperty(menuActive);
+  }
+
+  @Override
+  public boolean onDiscMenuSupportedProperty(boolean menuSupported) {
+    return host.onDiscMenuSupportedProperty(menuSupported);
+  }
+
   void refreshForFileLoaded(Tracks tracks) {
     trackController.onFileLoaded();
     trackController.updateTracks(tracks);

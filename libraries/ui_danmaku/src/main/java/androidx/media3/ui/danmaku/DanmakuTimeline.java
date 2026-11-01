@@ -76,6 +76,21 @@ final class DanmakuTimeline {
     return low;
   }
 
+  /** Returns a snapshot of every loaded item, ordered by time. */
+  List<Danmaku> snapshot() {
+    if (chunks.isEmpty() || itemCount == 0) {
+      return Collections.emptyList();
+    }
+    Danmaku[] all = new Danmaku[itemCount];
+    int index = 0;
+    for (Danmaku[] chunk : chunks) {
+      System.arraycopy(chunk, 0, all, index, chunk.length);
+      index += chunk.length;
+    }
+    Arrays.sort(all, (first, second) -> Long.compare(first.timeMs, second.timeMs));
+    return Arrays.asList(all);
+  }
+
   void setWindowParams(long aheadMs, long behindMs, long reloadThresholdMs) {
     this.aheadMs = Math.max(0L, aheadMs);
     this.behindMs = Math.max(0L, behindMs);

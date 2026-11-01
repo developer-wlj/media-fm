@@ -41,6 +41,22 @@ public final class MpvLibrary {
    *
    * @param libraries The names of the mpv native libraries.
    */
+  private static volatile java.util.function.BooleanSupplier libraryLoader;
+
+  /**
+   * Sets a custom loader invoked the first time the native libraries are loaded. It must load
+   * every library that {@link #setLibraries(String...)} declares and return whether loading
+   * succeeded.
+   */
+  public static void setLibraryLoader(java.util.function.BooleanSupplier loader) {
+    libraryLoader = loader;
+  }
+
+  /** Returns the custom library loader, or null. */
+  public static java.util.function.BooleanSupplier getLibraryLoader() {
+    return libraryLoader;
+  }
+
   public static void setLibraries(String... libraries) {
     LOADER.setLibraries(libraries);
   }

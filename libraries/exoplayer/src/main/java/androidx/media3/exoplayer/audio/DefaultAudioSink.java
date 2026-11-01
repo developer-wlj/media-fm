@@ -286,6 +286,7 @@ public final class DefaultAudioSink implements AudioSink {
     private AudioCapabilities audioCapabilities;
     @Nullable private androidx.media3.common.audio.AudioProcessorChain audioProcessorChain;
     private boolean enableFloatOutput;
+    private boolean enableSurfaceControlFrameRetention;
     private boolean enableAudioOutputPlaybackParameters;
 
     private boolean buildCalled;
@@ -367,6 +368,18 @@ public final class DefaultAudioSink implements AudioSink {
     @CanIgnoreReturnValue
     public Builder setEnableFloatOutput(boolean enableFloatOutput) {
       this.enableFloatOutput = enableFloatOutput;
+      return this;
+    }
+
+    /**
+     * Sets whether frame retention through SurfaceControl is enabled for offloaded playback.
+     *
+     * @param enabled Whether to retain frames through SurfaceControl.
+     * @return This builder, for convenience.
+     */
+    @CanIgnoreReturnValue
+    public Builder setEnableSurfaceControlFrameRetention(boolean enabled) {
+      this.enableSurfaceControlFrameRetention = enabled;
       return this;
     }
 

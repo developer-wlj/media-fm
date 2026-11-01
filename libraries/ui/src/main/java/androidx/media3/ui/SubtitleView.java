@@ -352,6 +352,17 @@ public final class SubtitleView extends FrameLayout {
   }
 
   /** Sets a scale factor applied to subtitle sizes regardless of cue format. */
+  /**
+   * Sets the brightness applied to bitmap cues, in the -1..1 range, where 0 leaves them
+   * unchanged.
+   */
+  public void setBitmapSubtitleBrightness(float bitmapSubtitleBrightness) {
+    if (innerSubtitleView instanceof CanvasSubtitleOutput) {
+      ((CanvasSubtitleOutput) innerSubtitleView).setBitmapSubtitleBrightness(bitmapSubtitleBrightness);
+      updateOutput();
+    }
+  }
+
   public void setTextSizeScale(float textSizeScale) {
     applyTextSizeScale(textSizeScale);
     updateOutput();

@@ -35,6 +35,8 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.ExperimentalApi;
 import androidx.media3.common.util.Log;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.DecoderMode;
+import androidx.media3.exoplayer.DecoderManager;
 import androidx.media3.exoplayer.audio.AudioOutput;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioSink;
@@ -45,7 +47,9 @@ import androidx.media3.exoplayer.image.ImageDecoder;
 import androidx.media3.exoplayer.image.ImageRenderer;
 import androidx.media3.exoplayer.mediacodec.DefaultMediaCodecAdapterFactory;
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter;
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil;
 import androidx.media3.exoplayer.metadata.MetadataOutput;
 import androidx.media3.exoplayer.metadata.MetadataRenderer;
 import androidx.media3.exoplayer.text.TextOutput;
@@ -62,6 +66,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
+import java.util.List;
 
 /** Default {@link RenderersFactory} implementation. */
 @UnstableApi
@@ -121,7 +126,9 @@ public class DefaultRenderersFactory implements RenderersFactory {
   private @ExtensionRendererMode int extensionRendererMode;
   private long allowedVideoJoiningTimeMs;
   private boolean enableDecoderFallback;
+  private boolean enableSurfaceControlFrameRetention;
   private MediaCodecSelector mediaCodecSelector;
+  @Nullable private DecoderManager decoderManager;
   private boolean enableFloatOutput;
   private boolean enableAudioOutputPlaybackParameters;
   private boolean enableMediaCodecVideoRendererPrewarming;
@@ -222,6 +229,25 @@ public class DefaultRenderersFactory implements RenderersFactory {
   }
 
   /**
+   * Sets whether frames retained through SurfaceControl are used to keep the last video frame on
+   * screen while the surface is being reconfigured.
+   *
+   * @param enableSurfaceControlFrameRetention Whether to enable SurfaceControl frame retention.
+   * @return This factory, for convenience.
+   */
+  @CanIgnoreReturnValue
+  public final DefaultRenderersFactory setEnableSurfaceControlFrameRetention(
+      boolean enableSurfaceControlFrameRetention) {
+    this.enableSurfaceControlFrameRetention = enableSurfaceControlFrameRetention;
+    return this;
+  }
+
+  /** Returns whether SurfaceControl frame retention is enabled. */
+  public final boolean isSurfaceControlFrameRetentionEnabled() {
+    return enableSurfaceControlFrameRetention;
+  }
+
+  /**
    * Sets the policy used to decide whether native Dolby Vision output may be sent to the default
    * display.
    *
@@ -251,6 +277,28 @@ public class DefaultRenderersFactory implements RenderersFactory {
       MediaCodecSelector mediaCodecSelector) {
     this.mediaCodecSelector = mediaCodecSelector;
     return this;
+  }
+
+  /**
+   * Sets a {@link DecoderManager} whose {@linkplain DecoderMode decoder modes} restrict the codecs
+   * that {@link MediaCodec} based renderers may use. The manager overrides any {@link
+   * MediaCodecSelector} set via {@link #setMediaCodecSelector(MediaCodecSelector)}.
+   *
+   * @param decoderManager The {@link DecoderManager}, or {@code null} to use the configured {@link
+   *     MediaCodecSelector} without mode restrictions.
+   * @return This factory, for convenience.
+   */
+  @CanIgnoreReturnValue
+  public final DefaultRenderersFactory setDecoderManager(
+      @Nullable DecoderManager decoderManager) {
+    this.decoderManager = decoderManager;
+    return this;
+  }
+
+  /** Returns the {@link DecoderManager} set via {@link #setDecoderManager(DecoderManager)}. */
+  @Nullable
+  public final DecoderManager getDecoderManager() {
+    return decoderManager;
   }
 
   /**
@@ -467,11 +515,15 @@ public class DefaultRenderersFactory implements RenderersFactory {
       AudioRendererEventListener audioRendererEventListener,
       TextOutput textRendererOutput,
       MetadataOutput metadataRendererOutput) {
+    MediaCodecSelector effectiveMediaCodecSelector =
+        decoderManager != null
+            ? new DecoderModeMediaCodecSelector(decoderManager)
+            : mediaCodecSelector;
     ArrayList<Renderer> renderersList = new ArrayList<>();
     buildVideoRenderers(
         context,
         extensionRendererMode,
-        mediaCodecSelector,
+        effectiveMediaCodecSelector,
         enableDecoderFallback,
         eventHandler,
         videoRendererEventListener,
@@ -484,7 +536,7 @@ public class DefaultRenderersFactory implements RenderersFactory {
       buildAudioRenderers(
           context,
           extensionRendererMode,
-          mediaCodecSelector,
+          effectiveMediaCodecSelector,
           enableDecoderFallback,
           audioSink,
           eventHandler,
@@ -1045,5 +1097,35 @@ public class DefaultRenderersFactory implements RenderersFactory {
   @ForOverride
   protected ImageDecoder.Factory getImageDecoderFactory(Context context) {
     return new BitmapFactoryImageDecoder.Factory(context);
+  }
+
+  /**
+   * A {@link MediaCodecSelector} that restricts the returned codecs to those matching the {@link
+   * DecoderMode} the {@link DecoderManager} currently requests for the queried track type.
+   */
+  private static final class DecoderModeMediaCodecSelector implements MediaCodecSelector {
+
+    private final DecoderManager decoderManager;
+
+    private DecoderModeMediaCodecSelector(DecoderManager decoderManager) {
+      this.decoderManager = decoderManager;
+    }
+
+    @Override
+    public List<MediaCodecInfo> getDecoderInfos(
+        String mimeType, boolean requiresSecureDecoder, boolean requiresTunnelingDecoder)
+        throws MediaCodecUtil.DecoderQueryException {
+      @C.TrackType int trackType = MimeTypes.getTrackType(mimeType);
+      DecoderMode decoderMode;
+      if (trackType == C.TRACK_TYPE_AUDIO) {
+        decoderMode = decoderManager.getAudioMode();
+      } else if (trackType == C.TRACK_TYPE_VIDEO) {
+        decoderMode = decoderManager.getVideoMode();
+      } else {
+        decoderMode = DecoderMode.AUTO;
+      }
+      return MediaCodecSelector.DEFAULT.getDecoderInfos(
+          mimeType, requiresSecureDecoder, requiresTunnelingDecoder, decoderMode);
+    }
   }
 }

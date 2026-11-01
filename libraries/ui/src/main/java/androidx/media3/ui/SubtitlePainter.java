@@ -65,6 +65,29 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
   @Nullable private CharSequence cueText;
   @Nullable private Alignment cueTextAlignment;
   @Nullable private Bitmap cueBitmap;
+  private float bitmapSubtitleBrightness;
+
+  /**
+   * Sets the brightness applied to bitmap cues, in the -1..1 range, where 0 leaves them
+   * unchanged.
+   */
+  public void setBitmapSubtitleBrightness(float bitmapSubtitleBrightness) {
+    this.bitmapSubtitleBrightness = bitmapSubtitleBrightness;
+  }
+
+  private static android.graphics.ColorMatrix brightnessMatrix(float brightness) {
+    float add = brightness > 0 ? brightness * 255f : 0f;
+    float scale = brightness > 0 ? 1f : 1f + brightness;
+    android.graphics.ColorMatrix matrix = new android.graphics.ColorMatrix();
+    float[] values = matrix.getArray();
+    for (int i = 0; i < values.length; i++) {
+      values[i] *= scale;
+    }
+    values[4] = add;
+    values[9] = add;
+    values[14] = add;
+    return matrix;
+  }
   private float cueLine;
   private @Cue.LineType int cueLineType;
   private @Cue.AnchorType int cueLineAnchor;
@@ -210,6 +233,7 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
     this.cueText = BidiUtils.containsRtl(cue.text) ? BidiUtils.wrapText(cue.text) : cue.text;
     this.cueTextAlignment = cue.textAlignment;
     this.cueBitmap = cue.bitmap;
+    bitmapSubtitleBrightness = 0.0f;
     this.cueLine = cue.line;
     this.cueLineType = cue.lineType;
     this.cueLineAnchor = cue.lineAnchor;
@@ -506,6 +530,13 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
 
   @RequiresNonNull({"cueBitmap", "bitmapRect"})
   private void drawBitmapLayout(Canvas canvas) {
+    if (bitmapSubtitleBrightness != 0.0f) {
+      bitmapPaint.setColorFilter(
+          new android.graphics.ColorMatrixColorFilter(
+              brightnessMatrix(bitmapSubtitleBrightness)));
+    } else {
+      bitmapPaint.setColorFilter(null);
+    }
     canvas.drawBitmap(cueBitmap, /* src= */ null, bitmapRect, bitmapPaint);
   }
 
