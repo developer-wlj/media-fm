@@ -2,7 +2,7 @@ name: Build release AARs
 
 on:
   push:
-    branches: [ci/aar-fongmi]
+    branches: [ci/aar-fongmi, ci/aar-fongmi-587]
   workflow_dispatch:
     inputs:
       ref:
@@ -131,6 +131,16 @@ jobs:
               echo "::error::libplayer.so must link libmpv.so for $abi"
               exit 1
             fi
+            mkdir -p "$TMP/$abi/jni-extra"
+            unzip -q dist/lib-exoplayer-release.aar "jni/$abi/*" -d "$TMP/$abi/jni-extra"
+            unzip -q dist/lib-effect-release.aar "jni/$abi/*" -d "$TMP/$abi/jni-extra"
+            extra="$TMP/$abi/jni-extra/jni/$abi"
+            for lib in libmedia3ass.so libisoJNI.so libmedia3effect.so; do
+              if [ ! -e "$extra/$lib" ]; then
+                echo "::error::$lib missing for $abi"
+                exit 1
+              fi
+            done
             echo "OK $abi unified FFmpeg layout"
           done
 
