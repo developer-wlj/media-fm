@@ -38,22 +38,19 @@ if(supported_ffmpeg_abi_index EQUAL -1)
     message(FATAL_ERROR "Unsupported FFmpeg ABI: ${ANDROID_ABI}")
 endif()
 
-foreach(ffmpeg_lib avutil swresample avcodec avformat)
-    set(ffmpeg_lib_filename lib${ffmpeg_lib}.so)
-    set(ffmpeg_lib_file_path ${ffmpeg_binaries}/${ffmpeg_lib_filename})
-    if(NOT EXISTS "${ffmpeg_lib_file_path}")
-        message(FATAL_ERROR
-                "Missing FFmpeg library for ${ANDROID_ABI}: ${ffmpeg_lib_file_path}")
-    endif()
-    add_library(
-            ${ffmpeg_lib}
-            SHARED
-            IMPORTED)
-    set_target_properties(
-            ${ffmpeg_lib} PROPERTIES
-            IMPORTED_LOCATION
-            ${ffmpeg_lib_file_path})
-endforeach()
+set(ffmpeg_lib_file_path ${ffmpeg_binaries}/libffmpeg.so)
+if(NOT EXISTS "${ffmpeg_lib_file_path}")
+    message(FATAL_ERROR
+            "Missing FFmpeg library for ${ANDROID_ABI}: ${ffmpeg_lib_file_path}")
+endif()
+add_library(
+        ffmpeg
+        SHARED
+        IMPORTED)
+set_target_properties(
+        ffmpeg PROPERTIES
+        IMPORTED_LOCATION
+        ${ffmpeg_lib_file_path})
 
 if(NOT EXISTS "${libplacebo_include}/libplacebo/config.h")
     message(FATAL_ERROR
@@ -98,10 +95,7 @@ target_compile_definitions(ffmpegJNI
 
 target_link_libraries(ffmpegJNI
                       PRIVATE android
-                      PRIVATE swresample
-                      PRIVATE avcodec
-                      PRIVATE avformat
-                      PRIVATE avutil
+                      PRIVATE ffmpeg
                       PRIVATE libplacebo
                       PRIVATE ${android_egl_lib}
                       PRIVATE ${android_gles_lib}

@@ -100,6 +100,40 @@ jobs:
             exit 1
           fi
 
+      - name: Verify unified FFmpeg layout
+        run: |
+          set -euo pipefail
+          TMP=$(mktemp -d)
+          for abi in armeabi-v7a arm64-v8a; do
+            mkdir -p "$TMP/$abi"
+            unzip -q dist/lib-mpvplayer-release.aar "jni/$abi/*" -d "$TMP/$abi"
+            unzip -q dist/lib-decoder-ffmpeg-release.aar "jni/$abi/*" -d "$TMP/$abi"
+            dir="$TMP/$abi/jni/$abi"
+            for split in libavcodec libavdevice libavfilter libavformat libavutil libswresample libswscale; do
+              if [ -e "$dir/$split.so" ]; then
+                echo "::error::$split.so must not be packaged for $abi"
+                exit 1
+              fi
+            done
+            for lib in libffmpeg.so libmpv.so libplayer.so libffmpegJNI.so; do
+              if [ ! -e "$dir/$lib" ]; then
+                echo "::error::$lib missing for $abi"
+                exit 1
+              fi
+            done
+            for lib in libmpv.so libplayer.so libffmpegJNI.so; do
+              if ! readelf -d "$dir/$lib" | grep -q 'Shared library: \[libffmpeg.so\]'; then
+                echo "::error::$lib must link libffmpeg.so for $abi"
+                exit 1
+              fi
+            done
+            if ! readelf -d "$dir/libplayer.so" | grep -q 'Shared library: \[libmpv.so\]'; then
+              echo "::error::libplayer.so must link libmpv.so for $abi"
+              exit 1
+            fi
+            echo "OK $abi unified FFmpeg layout"
+          done
+
       - name: Write manifest and summary
         run: |
           set -euo pipefail
