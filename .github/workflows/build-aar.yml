@@ -1,0 +1,134 @@
+name: Build release AARs
+
+on:
+  push:
+    branches: [ci/aar-fongmi]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要构建的分支/tag/commit（留空 = 本分支）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aar-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AAR_LIST: move.txt
+  BUILD_REF: ${{ github.event.inputs.ref || github.ref_name }}
+
+jobs:
+  aar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install Android SDK components
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$SDK_DIR/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" --licenses > /dev/null || true
+
+          # NDK 版本跟着 decoder_ffmpeg 的 provenance 文件走，上游 bump 时不必改 workflow
+          NDK_VER=$(sed -n 's/^android\.ndk\.version=//p' \
+            libraries/decoder_ffmpeg/src/main/resources/META-INF/androidx.media3.decoder.ffmpeg/native-dependencies.properties)
+
+          PKGS=("platforms;android-36" "build-tools;36.0.0")
+          [ -d "$SDK_DIR/ndk/$NDK_VER" ] || PKGS+=("ndk;$NDK_VER")
+          ls -d "$SDK_DIR"/cmake/*/ > /dev/null 2>&1 || PKGS+=("cmake;3.22.1")
+
+          echo "NDK=$NDK_VER"
+          for p in "${PKGS[@]}"; do
+            echo ">> sdkmanager $p"
+            "$SDKMANAGER" --sdk_root="$SDK_DIR" "$p"
+          done
+          echo "已安装 ndk: $(ls "$SDK_DIR/ndk" 2> /dev/null | tr '\n' ' ')"
+          echo "已安装 cmake: $(ls "$SDK_DIR/cmake" 2> /dev/null | tr '\n' ' ')"
+
+      # assembleLibs 末尾调 cmd /c move.bat，Linux runner 上跑不通，所以按 move.txt 直接拼模块任务
+      - name: Resolve Gradle tasks
+        id: tasks
+        run: |
+          set -euo pipefail
+          names=$(sed 's/\r$//; s/-release\.aar$//' "$AAR_LIST" | tr '\n' ' ')
+          tasks=""
+          for n in $names; do tasks="$tasks :$n:assembleRelease"; done
+          echo "tasks=${tasks# }" >> "$GITHUB_OUTPUT"
+          echo "count=$(echo $tasks | wc -w)" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble release AARs
+        env:
+          TASKS: ${{ steps.tasks.outputs.tasks }}
+        run: |
+          set -euo pipefail
+          echo "构建任务: $TASKS"
+          ./gradlew --no-daemon --console=plain --stacktrace $TASKS
+
+      - name: Collect AARs
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          missing=0
+          for aar in $(sed 's/\r$//' "$AAR_LIST"); do
+            src=$(find . -type f -path '*/outputs/aar/*' -name "$aar" | head -n1)
+            if [ -z "$src" ]; then
+              echo "::error::未产出 $aar"
+              missing=1
+            else
+              cp "$src" "dist/$aar"
+              echo "OK $aar  <- $src"
+            fi
+          done
+          if [ "$missing" = 1 ]; then
+            echo "本次实际产出的 aar："
+            find . -name '*.aar' | sed 's/^/  /'
+            exit 1
+          fi
+
+      - name: Write manifest and summary
+        run: |
+          set -euo pipefail
+          {
+            echo "repository: ${{ github.repository }}"
+            echo "branch: $BUILD_REF"
+            echo "commit: $GITHUB_SHA"
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/$GITHUB_RUN_ID"
+            echo "built_utc: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "java: $(java -version 2>&1 | head -n1)"
+            SDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+            echo "ndk: $(ls "$SDK_DIR/ndk" 2> /dev/null | tr '\n' ' ')"
+            echo "modules: ${{ steps.tasks.outputs.count }}"
+          } > dist/BUILD_INFO.txt
+          (cd dist && sha256sum *.aar > SHA256SUMS.txt)
+          {
+            echo "## AAR 产物（${{ steps.tasks.outputs.count }} 个）"
+            echo ""
+            echo "| 文件 | 大小 |"
+            echo "| --- | --- |"
+            for f in dist/*.aar; do
+              printf '| %s | %s |\n' "$(basename "$f")" "$(du -h "$f" | cut -f1)"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: media3-aars-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
