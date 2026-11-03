@@ -178,6 +178,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements DiscMenuControl
   private final MpvSeekController seekController;
   private @C.DecodeMode int decode;
   @Nullable private AudioOutputListener audioOutputListener;
+  @Nullable private AudioFilterListener audioFilterListener;
   private boolean handlingPlayerCommand;
 
   private MpvPlayer(
@@ -365,6 +366,19 @@ public final class MpvPlayer extends SimpleBasePlayer implements DiscMenuControl
       return false;
     }
     return effectController.setAudioFilter(checkNotNull(audioFilter));
+  }
+
+  /** Listener for audio filter application results. */
+  public interface AudioFilterListener {
+    void onAudioFilterApplied(boolean success);
+  }
+
+  public void setAudioFilterListener(@Nullable AudioFilterListener listener) {
+    verifyApplicationThread();
+    if (!playerInfo.isReleased()) {
+      audioFilterListener = listener;
+      effectController.setAudioFilterListener(listener);
+    }
   }
 
   public void setAudioOutputListener(@Nullable AudioOutputListener listener) {

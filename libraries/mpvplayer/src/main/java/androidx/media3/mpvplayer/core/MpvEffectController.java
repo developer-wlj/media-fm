@@ -18,6 +18,7 @@ package androidx.media3.mpvplayer.core;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import androidx.annotation.Nullable;
+import androidx.media3.mpvplayer.MpvPlayer.AudioFilterListener;
 import androidx.media3.mpvplayer.audio.MpvAudioFilter;
 import androidx.media3.mpvplayer.audio.MpvAudioFilterCommand;
 import androidx.media3.mpvplayer.nativebridge.MpvCommandDispatcher;
@@ -40,6 +41,7 @@ public final class MpvEffectController {
   @Nullable private MpvVideoEqualizer appliedVideoEqualizer;
   @Nullable private MpvAudioFilter audioFilter;
   @Nullable private MpvAudioFilter appliedAudioFilter;
+  @Nullable private AudioFilterListener audioFilterListener;
 
   public MpvEffectController(
       MpvPlaybackProperties playbackProperties,
@@ -64,12 +66,19 @@ public final class MpvEffectController {
   public boolean setAudioFilter(MpvAudioFilter audioFilter) {
     this.audioFilter = checkNotNull(audioFilter);
     if (!activeFileSupplier.get()) {
+      notifyAudioFilterApplied(true);
       return true;
     }
     @Nullable MpvAudioFilter targetAudioFilter = getTargetAudioFilter();
-    return targetAudioFilter == null
+    boolean applied = targetAudioFilter == null
         || targetAudioFilter.equals(appliedAudioFilter)
         || applyAudioFilter(targetAudioFilter);
+    notifyAudioFilterApplied(applied);
+    return applied;
+  }
+
+  public void setAudioFilterListener(@Nullable AudioFilterListener listener) {
+    this.audioFilterListener = listener;
   }
 
   public void addPerFileOptions(MpvPerFileOptions options) {
@@ -91,7 +100,14 @@ public final class MpvEffectController {
     }
     @Nullable MpvAudioFilter targetAudioFilter = getTargetAudioFilter();
     if (targetAudioFilter != null && !targetAudioFilter.equals(appliedAudioFilter)) {
-      applyAudioFilter(targetAudioFilter);
+      notifyAudioFilterApplied(applyAudioFilter(targetAudioFilter));
+    }
+  }
+
+  private void notifyAudioFilterApplied(boolean success) {
+    @Nullable AudioFilterListener listener = audioFilterListener;
+    if (listener != null) {
+      listener.onAudioFilterApplied(success);
     }
   }
 
