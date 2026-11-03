@@ -115,13 +115,13 @@ jobs:
                 exit 1
               fi
             done
-            for lib in libffmpeg.so libmpv.so libplayer.so libffmpegJNI.so; do
+            for lib in libffmpeg.so libmpv.so libplayer.so libffmpegJNI.so libffmpegDoviJNI.so; do
               if [ ! -e "$dir/$lib" ]; then
                 echo "::error::$lib missing for $abi"
                 exit 1
               fi
             done
-            for lib in libmpv.so libplayer.so libffmpegJNI.so; do
+            for lib in libmpv.so libplayer.so libffmpegJNI.so libffmpegDoviJNI.so; do
               if ! readelf -d "$dir/$lib" | grep -q 'Shared library: \[libffmpeg.so\]'; then
                 echo "::error::$lib must link libffmpeg.so for $abi"
                 exit 1
@@ -134,8 +134,9 @@ jobs:
             mkdir -p "$TMP/$abi/jni-extra"
             unzip -q dist/lib-exoplayer-release.aar "jni/$abi/*" -d "$TMP/$abi/jni-extra"
             unzip -q dist/lib-effect-release.aar "jni/$abi/*" -d "$TMP/$abi/jni-extra"
+            unzip -q dist/lib-exoplayer-hls-release.aar "jni/$abi/*" -d "$TMP/$abi/jni-extra"
             extra="$TMP/$abi/jni-extra/jni/$abi"
-            for lib in libmedia3ass.so libisoJNI.so libmedia3effect.so; do
+            for lib in libmedia3ass.so libisoJNI.so libmedia3effect.so libcmg_decrypt.so; do
               if [ ! -e "$extra/$lib" ]; then
                 echo "::error::$lib missing for $abi"
                 exit 1
